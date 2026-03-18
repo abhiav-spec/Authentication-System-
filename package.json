@@ -1,0 +1,30 @@
+{
+  "name": "authentication-system-",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abhiav-spec/Authentication-System-.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/abhiav-spec/Authentication-System-/issues"
+  },
+  "homepage": "https://github.com/abhiav-spec/Authentication-System-#readme",
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "mongoose": "^9.3.1",
+    "morgan": "^1.10.1",
+    "nodemon": "^3.1.14"
+  }
+}

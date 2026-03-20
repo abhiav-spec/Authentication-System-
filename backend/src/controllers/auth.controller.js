@@ -39,20 +39,41 @@ import Otp from '../models/otp.model.js';
 
         const otp = generateOTP();
         const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+        // Remove any existing OTPs for this email before creating a new one
+        await Otp.deleteMany({ email });
         await Otp.create({ email, otpHash });
 
-        await sendEmail(user.email, 'Verify your email', `Your OTP is ${otp}`, getOtpHtml(otp));
-
-        return res.status(201).json({ 
-        message: 'User registered successfully' ,
-        user:{
-            id: user._id,
-            username: user.username,
-            email: user.email,
-            verified: user.verified,
-            acesstoken: accesstoken,
+        // Send OTP email
+        const emailResult = await sendEmail(user.email, 'Verify your email', `Your OTP is ${otp}`, getOtpHtml(otp));
+        
+        // Log OTP to console for development (remove in production)
+        console.log(`📧 OTP for ${email}: ${otp}`);
+        
+        if (!emailResult.success) {
+            console.warn(`⚠️ Email sending failed: ${emailResult.error}. OTP available in console logs.`);
         }
-    });
+
+        const responsePayload = {
+            message: 'User registered successfully',
+            user: {
+                id: user._id,
+                username: user.username,
+                email: user.email,
+                verified: user.verified,
+                acesstoken: accesstoken,
+            },
+        };
+
+        // Development fallback: allow verification flow even if SMTP/OAuth is misconfigured.
+        if (!emailResult.success && process.env.NODE_ENV !== 'production') {
+            responsePayload.otpSent = false;
+            responsePayload.devOtp = otp;
+            responsePayload.emailError = emailResult.error;
+        } else {
+            responsePayload.otpSent = true;
+        }
+
+        return res.status(201).json(responsePayload);
 
     } catch (error) {
         console.error('Error registering user:', error);
@@ -225,6 +246,13 @@ const login = async (req, res) => {
 const verifyEmail = async (req, res) => {
     try {
         const { email, otp } = req.body;
+        if (!email || !otp) {
+            return res.status(400).json({ error: 'Email and OTP are required' });
+        }
+        if (!/^\d{6}$/.test(String(otp))) {
+            return res.status(400).json({ error: 'OTP must be 6 digits' });
+        }
+
         const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
         const otpRecord = await Otp.findOne({ email, otpHash });
         if (!otpRecord) {
@@ -251,4 +279,37 @@ const verifyEmail = async (req, res) => {
     }
 };
 
-export { registerUser, getUserProfile, refreshToken, logout, logoutAll, login, verifyEmail };
+const resendOtp = async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(400).json({ error: 'User not found' });
+        }
+        if (user.verified) {
+            return res.status(400).json({ error: 'Email is already verified' });
+        }
+
+        const otp = generateOTP();
+        const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+        await Otp.deleteMany({ email });
+        await Otp.create({ email, otpHash });
+
+        const emailResult = await sendEmail(user.email, 'Verify your email', `Your OTP is ${otp}`, getOtpHtml(otp));
+        console.log(`📧 Resent OTP for ${email}: ${otp}`);
+
+        return res.status(200).json({
+            message: 'OTP resent successfully',
+            otpSent: emailResult.success,
+            ...(process.env.NODE_ENV !== 'production' && !emailResult.success ? { devOtp: otp } : {}),
+        });
+    } catch (error) {
+        console.error('Error resending OTP:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+export { registerUser, getUserProfile, refreshToken, logout, logoutAll, login, verifyEmail, resendOtp };

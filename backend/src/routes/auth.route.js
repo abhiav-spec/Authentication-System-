@@ -1,6 +1,5 @@
 import {Router} from 'express';
-import {registerUser, getUserProfile,refreshToken,logout,logoutAll,login} from '../controllers/auth.controller.js';
-import { get } from 'mongoose';
+import {registerUser, getUserProfile,refreshToken,logout,logoutAll,login,verifyEmail} from '../controllers/auth.controller.js';
 
 const router = Router();
 
@@ -9,7 +8,8 @@ router.get("/refresh-token", refreshToken);
 router.get('/profile', getUserProfile);
 router.get('/logout', logout);
 router.get('/logout-all', logoutAll);
-router.get('/login',login);
+router.post('/login', login);
+router.post('/verify-email', verifyEmail);
 
 
 

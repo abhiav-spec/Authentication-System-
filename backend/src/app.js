@@ -10,6 +10,9 @@ app.use(cookieParser());
 app.use(express.json());
 app.use(morgan('dev'));
 app.use('/api/auth', authRoutes);
+app.get('/', (req, res) => {
+    res.send('Welcome to the Authentication System API');
+});
 
 
 export default app;

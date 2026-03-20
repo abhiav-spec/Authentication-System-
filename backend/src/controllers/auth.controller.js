@@ -2,6 +2,9 @@ import User from '../models/user.model.js';
 import Session from '../models/session.model.js';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import sendEmail from '../services/email.service.js';
+import { generateOTP, getopthtml } from '../utils.js/utilis.js';
+import Otp from '../models/otp.model.js';
 
  const registerUser = async (req, res) => {
     try {
@@ -31,8 +34,14 @@ import jwt from 'jsonwebtoken';
             userAgent: req.headers['user-agent']
         });
 
-        const accesstoken = jwt.sign({ 
-            id: user._id ,session_id:session._id}, process.env.JWT_SECRET, { expiresIn: '15m' });
+        const accesstoken = jwt.sign({
+            id: user._id, session_id: session._id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+
+        const otp = generateOTP();
+        const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+        await Otp.create({ email, otpHash });
+
+        await sendEmail(user.email, 'Verify your email', `Your OTP is ${otp}`, getopthtml(otp));
 
         return res.status(201).json({ 
         message: 'User registered successfully' ,
@@ -40,7 +49,8 @@ import jwt from 'jsonwebtoken';
             id: user._id,
             username: user.username,
             email: user.email,
-            acesstoken: accesstoken
+            verified: user.verified,
+            acesstoken: accesstoken,
         }
     });
 
@@ -151,11 +161,6 @@ const logoutAll = async (req, res) => {
         secure:true,
         sameSite:'strict',
     });
-    res.clearCookie('refreshToken', { 
-        httpOnly: true,
-        secure:true,
-        sameSite:'strict',
-    });
     res.status(200).json({ message: 'Logged out from all sessions successfully' });
  }
  catch(error){
@@ -170,6 +175,10 @@ const login = async (req, res) => {
         const user = await User.findOne({ email });
         if (!user) {
             return res.status(400).json({ error: 'Invalid email or password' });
+        }
+
+        if(!user.verified){
+            return res.status(400).json({ error: 'Email not verified' });
         }
 
         const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
@@ -213,4 +222,33 @@ const login = async (req, res) => {
     }
 }
 
-export { registerUser, getUserProfile, refreshToken, logout, logoutAll, login };
+const verifyEmail = async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+        const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+        const otpRecord = await Otp.findOne({ email, otpHash });
+        if (!otpRecord) {
+            return res.status(400).json({ error: 'Invalid OTP' });
+        }
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(400).json({ error: 'User not found' });
+        }
+        const users = await User.findByIdAndUpdate(user._id, { verified: true }, { new: true });
+        await Otp.deleteOne({ email, otpHash });
+        return res.status(200).json({
+            message: 'Email verified successfully',
+            user:{
+                id: users._id,
+                username: users.username,
+                email: users.email,
+                verified: users.verified,
+            }
+        });
+    } catch (error) {
+        console.error('Error verifying email:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+export { registerUser, getUserProfile, refreshToken, logout, logoutAll, login, verifyEmail };

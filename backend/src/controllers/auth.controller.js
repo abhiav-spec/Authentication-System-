@@ -3,7 +3,7 @@ import Session from '../models/session.model.js';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import sendEmail from '../services/email.service.js';
-import { generateOTP, getopthtml } from '../utils.js/utilis.js';
+import { generateOTP, getOtpHtml } from '../utils/otp.util.js';
 import Otp from '../models/otp.model.js';
 
  const registerUser = async (req, res) => {
@@ -41,7 +41,7 @@ import Otp from '../models/otp.model.js';
         const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
         await Otp.create({ email, otpHash });
 
-        await sendEmail(user.email, 'Verify your email', `Your OTP is ${otp}`, getopthtml(otp));
+        await sendEmail(user.email, 'Verify your email', `Your OTP is ${otp}`, getOtpHtml(otp));
 
         return res.status(201).json({ 
         message: 'User registered successfully' ,

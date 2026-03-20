@@ -1,11 +1,14 @@
-import generateotp from 'otp-generator';
+import otpGenerator from 'otp-generator';
 
 function generateOTP() {
-    const otp = generateotp.generate(6, { upperCaseAlphabets: false, specialChars: false, lowerCaseAlphabets: false });
-    return otp;
+    return otpGenerator.generate(6, {
+        upperCaseAlphabets: false,
+        specialChars: false,
+        lowerCaseAlphabets: false,
+    });
 }
 
-function getopthtml(otp) {
+function getOtpHtml(otp) {
     return `<!DOCTYPE html>
     <html>
         <body>
@@ -17,4 +20,4 @@ function getopthtml(otp) {
     `;
 }
 
-export { generateOTP, getopthtml };
+export { generateOTP, getOtpHtml };

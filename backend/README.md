@@ -66,8 +66,8 @@ Authentication-System-/
         auth.route.js
       services/
         email.service.js
-      utils.js/
-        utilis.js
+      utils/
+        otp.util.js
 ```
 
 ## Features

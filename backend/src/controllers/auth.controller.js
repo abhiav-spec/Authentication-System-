@@ -81,8 +81,19 @@ const refreshToken = async (req, res) => {
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
+        const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+        const session = await Session.findOne({ 
+            refreshToken: refreshTokenHash ,
+                revoked: false
+        });
+        if(!session){
+            return res.status(400).json({ error: 'Session not found' });
+        }   
         const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '15m' });
         const newRefreshToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+        const newRefreshTokenHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
+        session.refreshToken = newRefreshTokenHash;
+        await session.save();
         res.cookie('refreshToken', newRefreshToken, { 
             httpOnly: true,
             secure:true,
@@ -103,22 +114,103 @@ const logout = async (req, res) => {
         return res.status(400).json({ error: 'Refresh token not found' });
     }
 
+   try{
+    const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    const session = await Session.findOne({ refreshToken: refreshTokenHash });
+    if(!session){
+        return res.status(400).json({ error: 'Session not found' });
+    }
+
+    session.revoked = true;
+    await session.save();
+    
+    res.clearCookie('refreshToken', { 
+        httpOnly: true,
+        secure:true,
+        sameSite:'strict',
+    });
+    res.status(200).json({ message: 'Logout successful' });
+
+   }catch(error){
+    console.error('Error logging out:', error);
+    res.status(500).json({ error: 'Internal server error' });
+   }
+}
+
+
+const logoutAll = async (req, res) => {
+ const refreshToken = req.cookies.refreshToken;
+ if (!refreshToken) {
+     return res.status(400).json({ error: 'Refresh token not found' });
+ } try{
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+    const userId = decoded.id;
+    await Session.updateMany({ user: userId }, { revoked: true });
+    res.clearCookie('refreshToken', { 
+        httpOnly: true,
+        secure:true,
+        sameSite:'strict',
+    });
+    res.clearCookie('refreshToken', { 
+        httpOnly: true,
+        secure:true,
+        sameSite:'strict',
+    });
+    res.status(200).json({ message: 'Logged out from all sessions successfully' });
+ }
+ catch(error){
+    console.error('Error logging out from all sessions:', error);
+    res.status(500).json({ error: 'Internal server error' });
+ }
+}
+
+const login = async (req, res) => {
     try {
-        const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
-        const sessionmodel = await Session.findOneAndDelete({ user: decoded.id });
-        
-        if(!sessionmodel){
-            return res.status(404).json({ error: 'Session not found' });
+        const { email, password } = req.body;
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(400).json({ error: 'Invalid email or password' });
         }
-        sessionmodel.revoked = true;
-        await sessionmodel.save();
-        res.clearCookie('refreshToken');
-        return res.status(200).json({ message: 'Logged out successfully' });
+
+        const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
+        if (hashedPassword !== user.password) {
+            return res.status(400).json({ error: 'Invalid email or password' });
+        }
+
+        const refreshtoken=jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+        res.cookie('refreshToken', refreshtoken, { 
+            httpOnly: true,
+            secure:true,
+            sameSite:'strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000
+
+        });
+
+        const refreshtokenhash = crypto.createHash('sha256').update(refreshtoken).digest('hex');
+        const session = await Session.create({
+            user: user._id,
+            refreshToken: refreshtokenhash,
+            ip: req.ip,
+            userAgent: req.headers['user-agent']
+        });
+
+        const accesstoken = jwt.sign({ 
+            id: user._id ,session_id:session._id}, process.env.JWT_SECRET, { expiresIn: '15m' });
+
+        return res.status(200).json({ 
+        message: 'Login successful' ,
+        user:{
+            id: user._id,
+            username: user.username,
+            email: user.email,
+            acesstoken: accesstoken
+        }
+    });
+
     } catch (error) {
-        console.error('Error logging out:', error);
+        console.error('Error logging in:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 }
 
-
-export { registerUser, getUserProfile, refreshToken, logout };
+export { registerUser, getUserProfile, refreshToken, logout, logoutAll, login };
